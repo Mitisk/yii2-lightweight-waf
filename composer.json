@@ -1,0 +1,14 @@
+{
+    "name": "mitisk/yii2-lightweight-waf",
+    "description": "Lightweight WAF for Yii2 to protect against vulnerability scanners natively before framework initialization.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=7.4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Mitisk\\Waf\\": "src/"
+        }
+    }
+}
