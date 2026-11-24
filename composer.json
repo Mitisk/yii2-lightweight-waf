@@ -16,7 +16,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Mitisk\\Waf\\Tests\\\\": "tests/"
+            "Mitisk\\Waf\\Tests\\": "tests/"
         }
     },
     "scripts": {
