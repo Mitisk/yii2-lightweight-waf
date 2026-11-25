@@ -113,6 +113,11 @@ final class Firewall
         ];
         $this->storage->saveBlock($block);
         $this->log($now, 'ban', $event);
+        // Потолок списка: без него бессрочные блокировки копятся без конца
+        $trimmed = $this->storage->trimBlocks($config->maxBlocks, $now);
+        if ($trimmed > 0) {
+            $this->log($now, 'trim', ['note' => 'удалено старых блокировок: ' . $trimmed]);
+        }
 
         return $this->blocked($block, $ip, $key, $uri, $server, $post, $now);
     }

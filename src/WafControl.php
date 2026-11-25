@@ -20,9 +20,11 @@ namespace Mitisk\Waf;
 final class WafControl
 {
     /** Версия этого интерфейса: панель управления сверяет её перед работой. */
-    public const API = 1;
+    public const API = 2;
 
     private const MAX_BLOCK_DURATION = 315360000;
+    private const MIN_MAX_BLOCKS = 100;
+    private const MAX_MAX_BLOCKS = 100000;
 
     private Storage $storage;
 
@@ -124,6 +126,42 @@ final class WafControl
     }
 
     /**
+     * Сколько блокировок действует сейчас (быстро: файлы не читаются). С версии API 2.
+     */
+    public function blocksCount(): int
+    {
+        return $this->storage->countBlocks(($this->clock)());
+    }
+
+    /**
+     * Страница списка блокировок: сначала бессрочные и истекающие позже всех. С версии API 2.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function blocksPage(int $limit = 50, int $offset = 0): array
+    {
+        return $this->storage->blocksPage(($this->clock)(), $limit, $offset);
+    }
+
+    /**
+     * Снять все блокировки. С версии API 2.
+     *
+     * @param bool $keepManual оставить поставленные вручную
+     * @return int сколько снято
+     */
+    public function unblockAll(bool $keepManual = true): int
+    {
+        $removed = $this->storage->deleteAllBlocks($keepManual);
+        $this->storage->appendEvent([
+            'time' => ($this->clock)(),
+            'action' => 'unban_all',
+            'note' => 'снято блокировок: ' . $removed . ($keepManual ? ', ручные оставлены' : ''),
+        ]);
+
+        return $removed;
+    }
+
+    /**
      * Блокирует адрес вручную.
      *
      * @param int|null $seconds срок; null — бессрочно
@@ -205,7 +243,7 @@ final class WafControl
             }
         }
 
-        return ['bans' => array_sum($byDay), 'active' => count($this->blocks()), 'byDay' => $byDay];
+        return ['bans' => array_sum($byDay), 'active' => $this->blocksCount(), 'byDay' => $byDay];
     }
 
     // ─── Проверка настроек ───────────────────────────────────────
@@ -240,6 +278,15 @@ final class WafControl
                 $errors[$key] = $message;
             } else {
                 $clean[$key] = $value;
+            }
+        }
+
+        if (array_key_exists('maxBlocks', $settings)) {
+            $value = filter_var($settings['maxBlocks'], FILTER_VALIDATE_INT);
+            if ($value === false || ($value !== 0 && ($value < self::MIN_MAX_BLOCKS || $value > self::MAX_MAX_BLOCKS))) {
+                $errors['maxBlocks'] = 'Потолок блокировок — от ' . self::MIN_MAX_BLOCKS . ' до ' . self::MAX_MAX_BLOCKS . ' или 0 (без потолка).';
+            } else {
+                $clean['maxBlocks'] = $value;
             }
         }
 

@@ -15,7 +15,7 @@ namespace Mitisk\Waf;
  */
 class LightweightWaf
 {
-    public const VERSION = '2.1.0';
+    public const VERSION = '2.2.0';
 
     /** Конфиг текущего запроса; null — run() не вызывался (консоль, WAF не подключён в index.php). */
     private static ?Config $config = null;

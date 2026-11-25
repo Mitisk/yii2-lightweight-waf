@@ -51,6 +51,7 @@ final class Config
         'observeOnly',
         'permanentBlock',
         'blockDuration',
+        'maxBlocks',
         'disabledPatterns',
         'extraPatterns',
         'allowIps',
@@ -78,6 +79,12 @@ final class Config
     public bool $permanentBlock = false;
 
     public int $blockDuration = 86400;
+
+    /**
+     * Потолок числа блокировок: когда их больше, самые старые автоматические удаляются
+     * (ручные остаются). 0 — без потолка: при бессрочной блокировке список будет только расти.
+     */
+    public int $maxBlocks = 2000;
 
     /** @var string[] Базовый список: встроенный или badPatterns из кода */
     public array $basePatterns = self::DEFAULT_PATTERNS;
@@ -224,6 +231,9 @@ final class Config
         }
         if (isset($values['blockDuration'])) {
             $this->blockDuration = max(self::MIN_BLOCK_DURATION, (int) $values['blockDuration']);
+        }
+        if (isset($values['maxBlocks'])) {
+            $this->maxBlocks = max(0, (int) $values['maxBlocks']);
         }
         if (isset($values['captchaMaxAttempts'])) {
             $this->captchaMaxAttempts = max(1, (int) $values['captchaMaxAttempts']);

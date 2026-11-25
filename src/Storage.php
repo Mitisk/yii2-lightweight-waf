@@ -122,6 +122,125 @@ final class Storage
         return $blocks;
     }
 
+    /**
+     * Сколько блокировок действует сейчас. Считается по именам и срокам файлов (mtime — срок
+     * блокировки), сами файлы не читаются: быстро при любом размере списка.
+     */
+    public function countBlocks(int $now): int
+    {
+        $count = 0;
+        foreach ($this->files(self::BLOCK_PREFIX, '.php') as $file) {
+            if ((int) @filemtime($file) > $now) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * Страница списка блокировок. Порядок — по сроку: сначала бессрочные и те, что истекают позже
+     * (при одном сроке блокировки это самые свежие). Читаются только файлы страницы.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function blocksPage(int $now, int $limit, int $offset = 0): array
+    {
+        $blocks = [];
+        foreach (array_slice($this->blockFilesBySoonestExpiry($now, true), max(0, $offset), max(0, $limit)) as $file) {
+            $block = $this->readGuarded($file);
+            if ($block !== null && !empty($block['key'])) {
+                $blocks[] = $block;
+            }
+        }
+
+        return $blocks;
+    }
+
+    /**
+     * Держит список в пределах потолка: когда блокировок больше $max, удаляет самые старые
+     * автоматические — до 90% потолка, чтобы уборка не запускалась на каждой новой блокировке.
+     * Ручные блокировки администратора не трогает.
+     *
+     * @return int сколько блокировок удалено
+     */
+    public function trimBlocks(int $max, int $now): int
+    {
+        if ($max <= 0) {
+            return 0;
+        }
+        $files = $this->blockFilesBySoonestExpiry($now, false);
+        $extra = count($files) - $max;
+        if ($extra <= 0) {
+            return 0;
+        }
+
+        $toRemove = count($files) - (int) floor($max * 0.9);
+        $removed = 0;
+        foreach ($files as $file) {
+            if ($removed >= $toRemove) {
+                break;
+            }
+            $block = $this->readGuarded($file);
+            if ($block !== null && ($block['reason'] ?? '') === 'manual') {
+                continue;
+            }
+            if (@unlink($file)) {
+                $removed++;
+            }
+        }
+
+        return $removed;
+    }
+
+    /**
+     * Снимает все блокировки разом.
+     *
+     * @param bool $keepManual оставить блокировки, поставленные администратором вручную
+     * @return int сколько блокировок снято
+     */
+    public function deleteAllBlocks(bool $keepManual = true): int
+    {
+        $removed = 0;
+        foreach ($this->files(self::BLOCK_PREFIX, '.php') as $file) {
+            if ($keepManual) {
+                $block = $this->readGuarded($file);
+                if ($block !== null && ($block['reason'] ?? '') === 'manual') {
+                    continue;
+                }
+            }
+            if (@unlink($file)) {
+                $removed++;
+            }
+        }
+
+        return $removed;
+    }
+
+    /**
+     * Файлы действующих блокировок по сроку (mtime файла = срок блокировки).
+     *
+     * @param bool $latestFirst true — сначала истекающие позже всех, false — раньше всех
+     * @return string[]
+     */
+    private function blockFilesBySoonestExpiry(int $now, bool $latestFirst): array
+    {
+        $byExpiry = [];
+        foreach ($this->files(self::BLOCK_PREFIX, '.php') as $file) {
+            $mtime = (int) @filemtime($file);
+            if ($mtime > $now) {
+                $byExpiry[$file] = $mtime;
+            }
+        }
+        if ($latestFirst) {
+            arsort($byExpiry, SORT_NUMERIC);
+        } else {
+            asort($byExpiry, SORT_NUMERIC);
+        }
+
+        return array_keys($byExpiry);
+    }
+
     // ─── Каптча ──────────────────────────────────────────────────
 
     /**
